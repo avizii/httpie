@@ -5,6 +5,10 @@ use anyhow::{anyhow, Result};
 use reqwest::{Client, header, Response, Url};
 use colored::Colorize;
 use mime::Mime;
+use syntect::easy::HighlightLines;
+use syntect::highlighting::{Style, ThemeSet};
+use syntect::parsing::SyntaxSet;
+use syntect::util::{as_24_bit_terminal_escaped, LinesWithEndings};
 
 /// http GET request
 #[derive(Parser, Debug)]
@@ -16,8 +20,7 @@ struct Get {
 
 /// check valid url for get request
 fn parse_url(s: &str) -> Result<String> {
-    // let _url: Url = s.parse()?;  todo for 1: why can it work which written here
-    let _url: Url = Url::parse(s)?;
+    let _url: Url = s.parse()?;
     Ok(s.into())
 }
 
@@ -54,7 +57,7 @@ impl FromStr for KvPair {
 }
 
 fn parse_kv_pair(s: &str) -> Result<KvPair> {
-    Ok(s.parse()?)  // todo for 1: why can it work which written here
+    Ok(s.parse()?)
 }
 
 /// see https://github.com/clap-rs/clap/blob/v3.1.1/examples/tutorial_derive/README.md
@@ -83,11 +86,22 @@ fn print_header(response: &Response) {
     print!("\n");
 }
 
+fn print_syntect(s: &str, ext: &str) {
+    let ps = SyntaxSet::load_defaults_newlines();
+    let ts = ThemeSet::load_defaults();
+    let syntax = ps.find_syntax_by_extension(ext).unwrap();
+    let mut h = HighlightLines::new(syntax, &ts.themes["base16-ocean.dark"]);
+    for line in LinesWithEndings::from(s) {
+        let ranges: Vec<(Style, &str)> = h.highlight(line, &ps);
+        let escaped = as_24_bit_terminal_escaped(&ranges[..], true);
+        println!("{}", escaped);
+    }
+}
+
 fn print_body(m: Option<Mime>, body: &String) {
     match m {
-        Some(v) if v == mime::APPLICATION_JSON => {
-            println!("{}", jsonxf::pretty_print(body).unwrap().cyan());
-        },
+        Some(v) if v == mime::APPLICATION_JSON => print_syntect(body, "json"),
+        Some(v) if v == mime::TEXT_HTML => print_syntect(body, "html"),
         _ => println!("{}", body),
     };
 }
@@ -109,7 +123,6 @@ async fn print_response(response: Response) -> Result<()> {
 
 async fn get(client: Client, args: &Get) -> Result<()> {
     let response = client.get(&args.url).send().await?; // todo for 2: why not really args, but it is &args
-    // println!("{:?}", response.text().await?);
     Ok(print_response(response).await?)
 }
 
@@ -119,14 +132,13 @@ async fn post(client: Client, args: &Post) -> Result<()> {
         body.insert(&pair.k, &pair.v);
     };
     let response = client.post(&args.url).json(&body).send().await?;
-    // println!("{:?}", response.text().await?);
     Ok(print_response(response).await?)
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
+    // cli args parse
     let opts: Opts = Opts::parse();
-    println!("{:?}", opts);
 
     let mut headers = header::HeaderMap::new();
     headers.insert("X-POWERED-BY", "Rust".parse()?);
@@ -136,6 +148,7 @@ async fn main() -> Result<()> {
         .default_headers(headers)
         .build()?;
 
+    // `ref` keyword: https://doc.rust-lang.org/std/keyword.ref.html#-vs-ref
     let result = match opts.sub_cmd {
         SubCommand::Get(ref args) => get(client, args).await?,
         SubCommand::Post(ref args) => post(client, args).await?,
@@ -172,4 +185,5 @@ mod tests {
             }
         );
     }
+
 }

@@ -13,3 +13,4 @@ jsonxf = "1.1.1"   # json pretty format print
 mime = "0.3.16"   # handle mine type
 reqwest = { version = "0.11.8", features = ["json"]} # http client
 tokio = { version = "1.15.0", features = ["full"]}  # async handle
+syntect = "4.6.0"   # sytax highlighting
